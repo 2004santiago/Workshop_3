@@ -10,6 +10,9 @@ python = "^3.12"
 pandas = "^2.2.3"
 matplotlib = "^3.9.2"
 jupyter = "^1.1.1"
+sqlalchemy = "^2.0.36"
+python-dotenv = "^1.0.1"
+scikit-learn = "^1.5.2"
 
 
 [build-system]
