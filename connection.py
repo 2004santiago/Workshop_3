@@ -11,10 +11,10 @@ nameDB = os.getenv('DB_NAME')
 userDB = os.getenv('DB_USER')
 passDB = os.getenv('DB_PASS')
 
-location_file = './data/finalDataset.csv'  
+location_file = './clean-data/finalDataset.csv'  
 raw_table_database = 'score_country'  
 
-location_file2 = './data/modelDataset.csv'  
+location_file2 = './clean-data/modelDataset.csv'  
 raw_table_database2 = 'model_dataset'  
 
 engine = create_engine(f'postgresql+psycopg2://{userDB}:{passDB}@{localhost}:{port}/{nameDB}')
