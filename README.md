@@ -78,7 +78,7 @@ and we go out the bash with:
 exit
 ```
 
-1. We run the python scripts 
+1. We run the python scripts in the following order 
 
 ```bash
 python ./kafka/process_data.py
