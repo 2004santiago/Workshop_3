@@ -88,6 +88,10 @@ python ./kafka/process_data.py
 python ./kafka/consumer.py
 ```
 
+# test run video 
+
+[Watch the video on Google Drive](https://drive.google.com/file/d/1t5m83vlmZkp5MkL7hHt-8gt_5CRfV61_/view?usp=sharing)
+
 ---
 
 Finally we will be able to see the table in our database and observe the data that were predicted
