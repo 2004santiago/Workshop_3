@@ -15,6 +15,7 @@ python-dotenv = "^1.0.1"
 scikit-learn = "^1.5.2"
 psycopg2 = "^2.9.10"
 kafka-python = "^2.0.2"
+seaborn = "^0.13.2"
 
 
 [build-system]
