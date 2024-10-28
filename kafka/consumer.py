@@ -1,23 +1,20 @@
 import pandas as pd
 from json import loads
 import joblib
-import time
+import os
+import psycopg2
 from kafka import KafkaConsumer
 from dotenv import load_dotenv
-import os
+import time
 
-# Cargar variables de entorno
 load_dotenv()
 
-# Configurar la conexión a PostgreSQL con psycopg2
-import psycopg2
 db_user = os.getenv("DB_USER")
 db_password = os.getenv("DB_PASS")
 db_host = os.getenv("LOCALHOST")
 db_port = os.getenv("PORT")
-db_database = os.getenv("DB_DATABASE")
+db_database = os.getenv("DB_NAME")
 
-# Configuración de la conexión psycopg2
 connection = psycopg2.connect(
     user=db_user,
     password=db_password,
@@ -25,68 +22,91 @@ connection = psycopg2.connect(
     port=db_port,
     database=db_database
 )
+cursor = connection.cursor()
 
-# Cargar el modelo guardado
+# Crear la tabla si no existe
+create_table_query = """
+CREATE TABLE IF NOT EXISTS happiness_predictions (
+    gdp NUMERIC,
+    family NUMERIC,
+    life_expectancy NUMERIC,
+    freedom NUMERIC,
+    government_trust NUMERIC,
+    generosity NUMERIC,
+    predicted_happiness_score NUMERIC
+);
+"""
+cursor.execute(create_table_query)
+connection.commit()
+
 model_file_path = './model/random_forest.pkl'
 model = joblib.load(model_file_path)
 
-# Configurar el Kafka Consumer
 consumer = KafkaConsumer(
     'happinessPredictions',
     auto_offset_reset='earliest',
     enable_auto_commit=True,
     group_id='happiness_group',
     value_deserializer=lambda m: loads(m.decode('utf-8')),
-    bootstrap_servers=['localhost:9092']
+    bootstrap_servers=['localhost:9092'],
+    consumer_timeout_ms=10000
 )
 
-# Archivo CSV para almacenar los datos predichos
-csv_file = 'predicted_happiness_scores.csv'
 
-# Verificar si el archivo CSV ya existe y establecer encabezado solo si no existe
-header = not os.path.exists(csv_file)
+# consumer = pd.read_csv("./clean-data/modelDataset.csv")  
 
-# Leer datos del consumidor, predecir y guardar en el CSV
+batch_size = 20
+batch_data = pd.DataFrame()
+
 for message in consumer:
     data = message.value
     df = pd.DataFrame([data])
 
     columns = ['gdp', 'family', 'life_expectancy', 'freedom', 'government_trust', 'generosity']
     
-    # Verificar si hay valores nulos
     if df[columns].isnull().values.any():
         print(f"Datos con valores nulos: {df}")
         continue
     
-    # Realizar la predicción
     df['predicted_happiness_score'] = model.predict(df[columns])
-    
-    # Guardar resultados en el archivo CSV
-    df[['gdp', 'family', 'life_expectancy', 'freedom', 'government_trust', 'generosity', 'predicted_happiness_score']].to_csv(
-        csv_file, mode='a', header=header, index=False
-    )
-    header = False  # Solo escribe el encabezado la primera vez
+    batch_data = pd.concat([batch_data, df], ignore_index=True)
 
     print(f"Predicted Happiness Score: {df['predicted_happiness_score'].values[0]}")
-    # time.sleep(1)
+    
+    if len(batch_data) >= batch_size:
+        try:
+            rows = [tuple(map(float, row)) for row in batch_data[['gdp', 'family', 'life_expectancy', 'freedom', 'government_trust', 'generosity', 'predicted_happiness_score']].values]
+            insert_query = """
+                INSERT INTO happiness_predictions (gdp, family, life_expectancy, freedom, government_trust, generosity, predicted_happiness_score) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.executemany(insert_query, rows)
+            connection.commit()
+            print(f"Lote de {batch_size} filas insertado en la base de datos PostgreSQL con éxito.")
 
-# Cerrar el consumidor
+        except Exception as e:
+            print(f"Error al insertar en PostgreSQL: {e}")
+            connection.rollback()
+        
+        batch_data = pd.DataFrame()
+
+if not batch_data.empty:
+    try:
+        rows = [tuple(map(float, row)) for row in batch_data[['gdp', 'family', 'life_expectancy', 'freedom', 'government_trust', 'generosity', 'predicted_happiness_score']].values]
+        insert_query = """
+            INSERT INTO happiness_predictions (gdp, family, life_expectancy, freedom, government_trust, generosity, predicted_happiness_score) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.executemany(insert_query, rows)
+        connection.commit()
+        print(f"Datos restantes ({len(batch_data)} filas) insertados en la base de datos PostgreSQL con éxito.")
+    except Exception as e:
+        print(f"Error al insertar los datos restantes en PostgreSQL: {e}")
+        connection.rollback()
+
 consumer.close()
 print("Consumer closed.")
 
-# Cargar el archivo CSV a la base de datos PostgreSQL
-try:
-    with open(csv_file, 'r') as f:
-        next(f)  # Saltar la cabecera
-        cursor = connection.cursor()
-        cursor.copy_expert(
-            "COPY happiness_predictions (gdp, family, life_expectancy, freedom, government_trust, generosity, predicted_happiness_score) FROM STDIN WITH CSV",
-            f
-        )
-        connection.commit()
-    print("Datos insertados en la base de datos PostgreSQL con éxito.")
-except Exception as e:
-    print(f"Error al insertar en PostgreSQL: {e}")
-finally:
-    connection.close()
-    print("Conexión a PostgreSQL cerrada.")
+cursor.close()
+connection.close()
+print("Conexión a PostgreSQL cerrada.")

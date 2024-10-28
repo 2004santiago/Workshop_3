@@ -2,6 +2,7 @@ import pandas as pd
 from kafka import KafkaProducer
 from json import dumps
 import time
+import json
 
 def procesar_dataset(filepath, year, rename_cols):
     df = pd.read_csv(filepath)
@@ -37,18 +38,19 @@ finalDataset = pd.concat(datasets, ignore_index=True)
 df = finalDataset[['happiness_score', 'gdp', 'family', 'life_expectancy', 'freedom', 'government_trust', 'generosity']]
 df = df.dropna()
 
-# Configurar Kafka Producer
+df.to_csv("./clean-data/modelDataset.csv", index=False)  
+
+
 producer = KafkaProducer(
-    value_serializer=lambda v: dumps(v).encode('utf-8'),
-    bootstrap_servers=['localhost:9092']
+    bootstrap_servers=['localhost:9092'],
+    value_serializer=lambda v: json.dumps(v).encode('latin-1') 
 )
 
-# Enviar los datos al tema de Kafka "happiness_predictions" con un retraso de 1 segundo
 for index, row in df.iterrows():
     data = row.to_dict()
-    producer.send('happinessPredictions', value=data)
+    producer.send('happinessPredictions', value=data)  
     print(f"Enviado: {data}")
-    time.sleep(1)
+    # time.sleep(1) 
 
 producer.close()
 print("Datos enviados a Kafka con éxito.")
