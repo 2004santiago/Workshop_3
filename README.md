@@ -10,6 +10,11 @@ The final step will involve streaming the data using Apache Kafka. This consists
 
 ---
 
+## WorkFlow
+![image.png](images-video/workflow.png)
+
+---
+
 ## Tools used
 
 - Python
